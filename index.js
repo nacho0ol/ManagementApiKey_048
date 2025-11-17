@@ -191,27 +191,27 @@ const authenticateAdmin = (req, res, next) => {
 // RUTE ADMIN (TERPROTEKSI)
 // ---------------------------------------------
 
+// [GET] List Semua User (Perlu token admin)
 app.get("/api/admin/users", authenticateAdmin, async (req, res) => {
   try {
     const [users] = await pool.query(
       "SELECT id, firstname, lastname, email, start_date, last_date FROM users_apikey ORDER BY created_at DESC"
     );
+
     const [keys] = await pool.query(
       "SELECT id, api_key, user_id, status FROM api_keys"
     );
+
     const usersWithKeys = users.map((user) => {
-      const userKeys = keys
+      const userKeyIds = keys
         .filter((key) => key.user_id === user.id)
-        .map((key) => ({
-          key_id: key.id,
-          api_key: key.api_key,
-          status: key.status,
-        }));
+        .map((key) => key.id);
       return {
         ...user,
-        api_keys: userKeys,
+        api_key_ids: userKeyIds,
       };
     });
+
     res.json(usersWithKeys);
   } catch (error) {
     console.error("Error get users:", error);

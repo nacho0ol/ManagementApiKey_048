@@ -1,15 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-R" />
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>// SYS: API KEY GENERATOR //</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
+    <title>// ADMIN: DASHBOARD //</title>
     <style>
       :root {
         --color-bg: #f8fafc;
@@ -234,148 +228,151 @@
     </style>
   </head>
   <body>
-    <div class="container">
-      <h1>API Key Generator & User</h1>
-
-      <div class="button-group">
-        <button id="generateBtn">Generate Key</button>
-        <button id="copyBtn">Copy to Clipboard</button>
-      </div>
-      <textarea
-        id="apiKeyArea"
-        placeholder="API key akan muncul di sini..."
-        readonly
-      ></textarea>
-
-      <div class="form-group" style="margin-top: 24px">
-        <label for="firstname">First Name</label>
-        <input type="text" id="firstname" placeholder="John" />
-      </div>
-      <div class="form-group">
-        <label for="lastname">Last Name</label>
-        <input type="text" id="lastname" placeholder="Doe" />
-      </div>
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" placeholder="john.doe@example.com" />
+    <div class="dashboard-container">
+      <div class="header">
+        <h1>Admin Dashboard</h1>
+        <button id="logoutBtn">Logout</button>
       </div>
 
-      <button id="saveBtn" style="width: 100%; background: #10b981">
-        2. Save User & Link Key
-      </button>
+      <h2 style="margin-top: 40px">User List</h2>
+      <div style="overflow-x: auto">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>First Name</th>
+              <th>Last Name</th>
+              <th>Email</th>
+              <th>Start Date</th>
+              <th>API Key IDs</th>
+            </tr>
+          </thead>
+          <tbody id="user-list"></tbody>
+        </table>
+      </div>
 
-      <div class="status-message" id="statusMessage"></div>
-
-      <hr />
-      <a href="/admin.html" style="text-decoration: none">
-        <button style="width: 100%; background: #334155">Admin Panel</button>
-      </a>
+      <h2 style="margin-top: 40px">API Key List</h2>
+      <div style="overflow-x: auto">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>API Key</th>
+              <th>Status</th>
+              <th>User ID</th>
+              <th>User Email</th>
+              <th>Expires At</th>
+            </tr>
+          </thead>
+          <tbody id="apikey-list"></tbody>
+        </table>
+      </div>
     </div>
 
     <script>
-      const generateBtn = document.getElementById("generateBtn");
-      const copyBtn = document.getElementById("copyBtn");
-      const saveBtn = document.getElementById("saveBtn");
-      const apiKeyArea = document.getElementById("apiKeyArea");
-      const statusMessage = document.getElementById("statusMessage");
-      const firstnameInput = document.getElementById("firstname");
-      const lastnameInput = document.getElementById("lastname");
-      const emailInput = document.getElementById("email");
+      const token = localStorage.getItem("adminToken");
+      const userListBody = document.getElementById("user-list");
+      const apiKeyListBody = document.getElementById("apikey-list");
+      const logoutBtn = document.getElementById("logoutBtn");
 
-      function showStatus(message, isError = false) {
-        statusMessage.textContent = message;
-        statusMessage.style.color = isError
-          ? "#ef4444"
-          : "var(--color-success)";
-        statusMessage.classList.add("show");
+      // 1. FUNGSI LOGOUT
+      logoutBtn.addEventListener("click", () => {
+        localStorage.removeItem("adminToken");
+        window.location.href = "/admin.html";
+      });
+
+      // 2. KEAMANAN: Cek token
+      if (!token) {
+        alert("Anda harus login terlebih dahulu!");
+        window.location.href = "/admin.html";
+      } else {
+        // 3. JIKA TOKEN ADA, AMBIL DATA
+        fetchData();
       }
 
-      // Generate Key
-      generateBtn.addEventListener("click", () => {
-        generateBtn.disabled = true;
-        generateBtn.textContent = "Generating...";
-        showStatus("Generating key...");
+      async function fetchData() {
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token, // <-- Kuncinya di sini
+        };
 
-        fetch("/generate-apikey")
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.apiKey) {
-              apiKeyArea.value = data.apiKey;
-              showStatus("API key generated! Isi data di bawah.");
-            } else {
-              throw new Error(data.error || "Unknown error");
-            }
-          })
-          .catch((error) => {
-            apiKeyArea.value = "";
-            showStatus(`Error: ${error.message}`, true);
-          })
-          .finally(() => {
-            generateBtn.disabled = false;
-            generateBtn.textContent = "1. Generate Key";
-          });
-      });
+        try {
+          // Ambil kedua data secara bersamaan
+          const [userRes, keyRes] = await Promise.all([
+            fetch("/api/admin/users", { headers: headers }),
+            fetch("/api/admin/apikeys", { headers: headers }),
+          ]);
 
-      // Copy Key
-      copyBtn.addEventListener("click", () => {
-        if (!apiKeyArea.value) {
-          showStatus("No API key to copy", true);
+          // Cek jika token tidak valid/kedaluwarsa
+          if (userRes.status === 401 || userRes.status === 403) {
+            throw new Error("Sesi Anda telah habis. Silakan login kembali.");
+          }
+
+          const users = await userRes.json();
+          const keys = await keyRes.json();
+
+          renderUsers(users);
+          renderApiKeys(keys);
+        } catch (error) {
+          alert(error.message);
+          localStorage.removeItem("adminToken");
+          window.location.href = "/admin.html";
+        }
+      }
+
+      // 4. FUNGSI UNTUK MERENDER DATA USER
+      function renderUsers(users) {
+        userListBody.innerHTML = ""; // Kosongkan tabel
+        if (users.length === 0) {
+          userListBody.innerHTML =
+            '<tr><td colspan="6">Tidak ada data user.</td></tr>';
           return;
         }
-        navigator.clipboard.writeText(apiKeyArea.value).then(() => {
-          copyBtn.textContent = "Copied!";
-          showStatus("API key copied!");
-          setTimeout(() => {
-            copyBtn.textContent = "Copy to Clipboard";
-            statusMessage.classList.remove("show");
-          }, 2000);
+
+        users.forEach((user) => {
+          const row = `
+            <tr>
+              <td>${user.id}</td>
+              <td>${user.firstname}</td>
+              <td>${user.lastname}</td>
+              <td>${user.email}</td>
+              <td>${
+                user.start_date ? user.start_date.split("T")[0] : "N/A"
+              }</td>
+              <td>${
+                user.api_key_ids.length > 0
+                  ? user.api_key_ids.join(", ")
+                  : "None"
+              }</td>
+            </tr>
+          `;
+          userListBody.innerHTML += row;
         });
-      });
+      }
 
-      // Save User
-      saveBtn.addEventListener("click", () => {
-        const firstname = firstnameInput.value;
-        const lastname = lastnameInput.value;
-        const email = emailInput.value;
-        const apiKey = apiKeyArea.value;
-
-        if (!firstname || !lastname || !email || !apiKey) {
-          showStatus("Tolong isi semua data dan generate API key.", true);
+      // 5. FUNGSI UNTUK MERENDER DATA API KEY
+      function renderApiKeys(keys) {
+        apiKeyListBody.innerHTML = ""; // Kosongkan tabel
+        if (keys.length === 0) {
+          apiKeyListBody.innerHTML =
+            '<tr><td colspan="6">Tidak ada data API key.</td></tr>';
           return;
         }
 
-        saveBtn.disabled = true;
-        saveBtn.textContent = "Saving...";
-
-        fetch("/api/register", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ firstname, lastname, email, apiKey }),
-        })
-          .then(async (res) => {
-            const data = await res.json();
-            if (!res.ok) {
-              throw new Error(data.error || "Registrasi gagal");
-            }
-            return data;
-          })
-          .then((data) => {
-            showStatus("Sukses! User dibuat dan key terhubung.");
-            firstnameInput.value = "";
-            lastnameInput.value = "";
-            emailInput.value = "";
-            apiKeyArea.value = "";
-          })
-          .catch((error) => {
-            showStatus(`Error: ${error.message}`, true);
-          })
-          .finally(() => {
-            saveBtn.disabled = false;
-            saveBtn.textContent = "2. Save User & Link Key";
-          });
-      });
+        keys.forEach((key) => {
+          const row = `
+            <tr>
+              <td>${key.id}</td>
+              <td>${key.api_key}</td>
+              <td>${key.status}</td>
+              <td>${key.user_id || "N/A"}</td>
+              <td>${key.user_email || "N/A"}</td>
+              <td>${key.expires_at ? key.expires_at.split("T")[0] : "N/A"}</td>
+            </tr>
+          `;
+          apiKeyListBody.innerHTML += row;
+        });
+      }
     </script>
   </body>
 </html>

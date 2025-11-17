@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-R" />
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>// SYS: API KEY GENERATOR //</title>
+    <title>// ADMIN: LOGIN //</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -235,147 +235,67 @@
   </head>
   <body>
     <div class="container">
-      <h1>API Key Generator & User</h1>
+      <h1>Admin Login</h1>
+      <p>Silakan login untuk mengakses dashboard.</p>
 
-      <div class="button-group">
-        <button id="generateBtn">Generate Key</button>
-        <button id="copyBtn">Copy to Clipboard</button>
-      </div>
-      <textarea
-        id="apiKeyArea"
-        placeholder="API key akan muncul di sini..."
-        readonly
-      ></textarea>
-
-      <div class="form-group" style="margin-top: 24px">
-        <label for="firstname">First Name</label>
-        <input type="text" id="firstname" placeholder="John" />
+      <div class="form-group">
+        <label for="adminEmail">Admin Email</label>
+        <input type="email" id="adminEmail" placeholder="admin@example.com" />
       </div>
       <div class="form-group">
-        <label for="lastname">Last Name</label>
-        <input type="text" id="lastname" placeholder="Doe" />
-      </div>
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" placeholder="john.doe@example.com" />
+        <label for="adminPassword">Admin Password</label>
+        <input type="password" id="adminPassword" placeholder="••••••••" />
       </div>
 
-      <button id="saveBtn" style="width: 100%; background: #10b981">
-        2. Save User & Link Key
+      <button id="adminLoginBtn" style="width: 100%; background: #334155">
+        Login Admin
       </button>
+      <div class="status-message" id="adminStatusMessage"></div>
 
-      <div class="status-message" id="statusMessage"></div>
-
-      <hr />
-      <a href="/admin.html" style="text-decoration: none">
-        <button style="width: 100%; background: #334155">Admin Panel</button>
-      </a>
+      <p class="text-center">
+        Belum punya akun?
+        <a href="/admin_register.html">Buat akun admin</a>
+      </p>
     </div>
 
     <script>
-      const generateBtn = document.getElementById("generateBtn");
-      const copyBtn = document.getElementById("copyBtn");
-      const saveBtn = document.getElementById("saveBtn");
-      const apiKeyArea = document.getElementById("apiKeyArea");
-      const statusMessage = document.getElementById("statusMessage");
-      const firstnameInput = document.getElementById("firstname");
-      const lastnameInput = document.getElementById("lastname");
-      const emailInput = document.getElementById("email");
+      const adminEmailInput = document.getElementById("adminEmail");
+      const adminPasswordInput = document.getElementById("adminPassword");
+      const adminLoginBtn = document.getElementById("adminLoginBtn");
+      const adminStatusMessage = document.getElementById("adminStatusMessage");
 
-      function showStatus(message, isError = false) {
-        statusMessage.textContent = message;
-        statusMessage.style.color = isError
+      function showAdminStatus(message, isError = false) {
+        adminStatusMessage.textContent = message;
+        adminStatusMessage.style.color = isError
           ? "#ef4444"
           : "var(--color-success)";
-        statusMessage.classList.add("show");
+        adminStatusMessage.classList.add("show");
       }
 
-      // Generate Key
-      generateBtn.addEventListener("click", () => {
-        generateBtn.disabled = true;
-        generateBtn.textContent = "Generating...";
-        showStatus("Generating key...");
+      adminLoginBtn.addEventListener("click", () => {
+        const email = adminEmailInput.value;
+        const password = adminPasswordInput.value;
 
-        fetch("/generate-apikey")
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.apiKey) {
-              apiKeyArea.value = data.apiKey;
-              showStatus("API key generated! Isi data di bawah.");
-            } else {
-              throw new Error(data.error || "Unknown error");
-            }
-          })
-          .catch((error) => {
-            apiKeyArea.value = "";
-            showStatus(`Error: ${error.message}`, true);
-          })
-          .finally(() => {
-            generateBtn.disabled = false;
-            generateBtn.textContent = "1. Generate Key";
-          });
-      });
-
-      // Copy Key
-      copyBtn.addEventListener("click", () => {
-        if (!apiKeyArea.value) {
-          showStatus("No API key to copy", true);
-          return;
-        }
-        navigator.clipboard.writeText(apiKeyArea.value).then(() => {
-          copyBtn.textContent = "Copied!";
-          showStatus("API key copied!");
-          setTimeout(() => {
-            copyBtn.textContent = "Copy to Clipboard";
-            statusMessage.classList.remove("show");
-          }, 2000);
-        });
-      });
-
-      // Save User
-      saveBtn.addEventListener("click", () => {
-        const firstname = firstnameInput.value;
-        const lastname = lastnameInput.value;
-        const email = emailInput.value;
-        const apiKey = apiKeyArea.value;
-
-        if (!firstname || !lastname || !email || !apiKey) {
-          showStatus("Tolong isi semua data dan generate API key.", true);
-          return;
-        }
-
-        saveBtn.disabled = true;
-        saveBtn.textContent = "Saving...";
-
-        fetch("/api/register", {
+        fetch("/api/admin/login", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ firstname, lastname, email, apiKey }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
         })
           .then(async (res) => {
             const data = await res.json();
-            if (!res.ok) {
-              throw new Error(data.error || "Registrasi gagal");
-            }
+            if (!res.ok) throw new Error(data.error);
             return data;
           })
           .then((data) => {
-            showStatus("Sukses! User dibuat dan key terhubung.");
-            firstnameInput.value = "";
-            lastnameInput.value = "";
-            emailInput.value = "";
-            apiKeyArea.value = "";
+            showAdminStatus("Login sukses! Mengarahkan...", false);
+            // SIMPAN TOKEN ke localStorage
+            localStorage.setItem("adminToken", data.token);
+            // ARAHKAN ke dashboard
+            window.location.href = "/dashboard.html";
           })
-          .catch((error) => {
-            showStatus(`Error: ${error.message}`, true);
-          })
-          .finally(() => {
-            saveBtn.disabled = false;
-            saveBtn.textContent = "2. Save User & Link Key";
-          });
+          .catch((err) => showAdminStatus(err.message, true));
       });
     </script>
   </body>
 </html>
+c
