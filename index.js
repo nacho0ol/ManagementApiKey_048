@@ -40,10 +40,11 @@ app.get("/generate-apikey", async (req, res) => {
     const randomToken = crypto.randomBytes(16).toString("hex");
     const newApiKey = KEY_PREFIX + randomToken;
 
-    const sql = "INSERT INTO api_keys (api_key) VALUES (?)";
+    const sql =
+      "INSERT INTO api_keys (api_key, expires_at) VALUES (?, NOW() + INTERVAL 30 DAY)";
     await pool.query(sql, [newApiKey]);
 
-    console.log("Key baru dibuat (belum terhubung ke user):", newApiKey);
+    console.log("Key baru dibuat (berlaku 30 hari):", newApiKey);
     res.json({ apiKey: newApiKey });
   } catch (error) {
     console.error("Error saat generate key:", error);
