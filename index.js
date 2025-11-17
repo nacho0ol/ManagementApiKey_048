@@ -1,4 +1,6 @@
+// ===============================================
 // 1. IMPORT SEMUA DEPENDENSI
+// ===============================================
 require("dotenv").config();
 const mysql = require("mysql2/promise");
 const express = require("express");
@@ -7,15 +9,21 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+// ===============================================
 // 2. SETUP APLIKASI EXPRESS
+// ===============================================
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ===============================================
 // 3. MIDDLEWARE
+// ===============================================
 app.use(express.json());
 app.use(express.static("public"));
 
+// ===============================================
 // 4. KONEKSI DATABASE (MYSQL POOL)
+// ===============================================
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -27,23 +35,22 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
+// ===============================================
+// 5. VARIABEL GLOBAL & RUTE
+// ===============================================
 const KEY_PREFIX = "Olip_j1p4_";
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// ===============================================
 // RUTE PUBLIK & REGISTRASI USER
-// ===============================================
+// ---------------------------------------------
 
-// [GET] Generate API Key baru (belum terhubung ke user)
 app.get("/generate-apikey", async (req, res) => {
   try {
     const randomToken = crypto.randomBytes(16).toString("hex");
     const newApiKey = KEY_PREFIX + randomToken;
-
     const sql =
       "INSERT INTO api_keys (api_key, expires_at) VALUES (?, NOW() + INTERVAL 30 DAY)";
     await pool.query(sql, [newApiKey]);
-
     console.log("Key baru dibuat (berlaku 30 hari):", newApiKey);
     res.json({ apiKey: newApiKey });
   } catch (error) {
@@ -52,10 +59,8 @@ app.get("/generate-apikey", async (req, res) => {
   }
 });
 
-// [POST] Mendaftarkan user baru dan menghubungkan API key
 app.post("/api/register", async (req, res) => {
   const { firstname, lastname, email, apiKey } = req.body;
-
   if (!firstname || !lastname || !email || !apiKey) {
     return res.status(400).json({
       error: "Semua field (firstname, lastname, email, apiKey) dibutuhkan.",
@@ -80,7 +85,7 @@ app.post("/api/register", async (req, res) => {
     }
 
     const userSql =
-      "INSERT INTO users (firstname, lastname, email, start_date) VALUES (?, ?, ?, CURDATE())";
+      "INSERT INTO users_apikey (firstname, lastname, email, start_date) VALUES (?, ?, ?, CURDATE())";
     const [userResult] = await connection.query(userSql, [
       firstname,
       lastname,
@@ -101,7 +106,6 @@ app.post("/api/register", async (req, res) => {
     });
   } catch (error) {
     if (connection) await connection.rollback();
-
     if (error.code === "ER_DUP_ENTRY") {
       res.status(409).json({ error: "Email sudah terdaftar." });
     } else {
@@ -113,24 +117,18 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// ===============================================
 // RUTE ADMIN (PEMBUATAN & LOGIN)
-// ===============================================
+// ---------------------------------------------
 
-// [POST] Membuat admin baru
 app.post("/api/admin/register", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Email dan password dibutuhkan" });
   }
-
   try {
-    // Hash password dengan bcrypt
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const sql = "INSERT INTO admins (email, password) VALUES (?, ?)";
     await pool.query(sql, [email, hashedPassword]);
-
     res.status(201).json({ message: "Admin berhasil dibuat" });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
@@ -142,35 +140,27 @@ app.post("/api/admin/register", async (req, res) => {
   }
 });
 
-// [POST] Login admin
 app.post("/api/admin/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Email dan password dibutuhkan" });
   }
-
   try {
     const sql = "SELECT * FROM admins WHERE email = ?";
     const [adminRows] = await pool.query(sql, [email]);
-
     if (adminRows.length === 0) {
       return res.status(401).json({ error: "Email atau password salah" });
     }
-
     const admin = adminRows[0];
-
     const isMatch = await bcrypt.compare(password, admin.password);
-
     if (!isMatch) {
       return res.status(401).json({ error: "Email atau password salah" });
     }
-
     const token = jwt.sign(
       { id: admin.id, email: admin.email, role: "admin" },
       JWT_SECRET,
       { expiresIn: "1h" }
     );
-
     res.json({ message: "Login berhasil", token: token });
   } catch (error) {
     console.error("Error login admin:", error);
@@ -178,20 +168,17 @@ app.post("/api/admin/login", async (req, res) => {
   }
 });
 
-// ===============================================
 // MIDDLEWARE OTENTIKASI ADMIN
-// ===============================================
+// ---------------------------------------------
 
 const authenticateAdmin = (req, res, next) => {
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // Format: "Bearer <token>"
-
+  const token = authHeader && authHeader.split(" ")[1];
   if (token == null) {
     return res
       .status(401)
       .json({ error: "Token tidak ada, otorisasi ditolak" });
   }
-
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({ error: "Token tidak valid" });
@@ -201,33 +188,17 @@ const authenticateAdmin = (req, res, next) => {
   });
 };
 
-// ===============================================
 // RUTE ADMIN (TERPROTEKSI)
-// ===============================================
-
-// [GET]
-app.get("/api/admin/users", authenticateAdmin, async (req, res) => {
-  try {
-    const [users] = await pool.query(
-      "SELECT id, firstname, lastname, email, start_date, last_date FROM users ORDER BY created_at DESC"
-    );
-    res.json(users);
-  } catch (error) {
-    console.error("Error get users:", error);
-    res.status(500).json({ error: "Gagal mengambil data user" });
-  }
-});
+// ---------------------------------------------
 
 app.get("/api/admin/users", authenticateAdmin, async (req, res) => {
   try {
     const [users] = await pool.query(
-      "SELECT id, firstname, lastname, email, start_date, last_date FROM users ORDER BY created_at DESC"
+      "SELECT id, firstname, lastname, email, start_date, last_date FROM users_apikey ORDER BY created_at DESC"
     );
-
     const [keys] = await pool.query(
       "SELECT id, api_key, user_id, status FROM api_keys"
     );
-
     const usersWithKeys = users.map((user) => {
       const userKeys = keys
         .filter((key) => key.user_id === user.id)
@@ -236,13 +207,11 @@ app.get("/api/admin/users", authenticateAdmin, async (req, res) => {
           api_key: key.api_key,
           status: key.status,
         }));
-
       return {
         ...user,
         api_keys: userKeys,
       };
     });
-
     res.json(usersWithKeys);
   } catch (error) {
     console.error("Error get users:", error);
@@ -250,31 +219,71 @@ app.get("/api/admin/users", authenticateAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/apikeys", authenticateAdmin, async (req, res) => {
+  try {
+    const sql = `
+            SELECT 
+                k.id, 
+                k.api_key, 
+                k.status, 
+                k.created_at,
+                k.expires_at, 
+                u.id as user_id, 
+                u.email as user_email
+            FROM api_keys k
+            LEFT JOIN users_apikey u ON k.user_id = u.id
+            ORDER BY k.created_at DESC
+        `;
+    const [keys] = await pool.query(sql);
+    res.json(keys);
+  } catch (error) {
+    console.error("Error get apikeys:", error);
+    res.status(500).json({ error: "Gagal mengambil data API key" });
+  }
+});
+
+app.delete("/api/admin/apikey/:id", authenticateAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const sql = "DELETE FROM api_keys WHERE id = ?";
+    const [result] = await pool.query(sql, [id]);
+    if (result.affectedRows > 0) {
+      res.json({ message: `API Key dengan ID ${id} berhasil dihapus` });
+    } else {
+      res
+        .status(404)
+        .json({ error: `API Key dengan ID ${id} tidak ditemukan` });
+    }
+  } catch (error) {
+    console.error("Error delete apikey:", error);
+    res.status(500).json({ error: "Gagal menghapus API key" });
+  }
+});
+
+// RUTE VALIDASI (PUBLIK)
+// ---------------------------------------------
+
 app.post("/validate-apikey", async (req, res) => {
   try {
     const { apiKeyToValidate } = req.body;
     if (!apiKeyToValidate) {
       return res.status(400).json({ error: "API key dibutuhkan" });
     }
-
     const sql = `
         SELECT COUNT(*) as count 
         FROM api_keys 
         WHERE api_key = ? 
           AND status = 'active' 
-          AND expires_at > NOW()`; 
+          AND expires_at > NOW()`;
     const [rows] = await pool.query(sql, [apiKeyToValidate]);
     const count = rows[0].count;
-
     if (count > 0) {
       res.json({ valid: true, message: "API Key sudah Valid" });
     } else {
-      res
-        .status(401)
-        .json({
-          valid: false,
-          message: "API Key Tidak Valid, Diblokir, atau Kedaluwarsa",
-        });
+      res.status(401).json({
+        valid: false,
+        message: "API Key Tidak Valid, Diblokir, atau Kedaluwarsa",
+      });
     }
   } catch (error) {
     console.error("Error saat validasi key:", error);
