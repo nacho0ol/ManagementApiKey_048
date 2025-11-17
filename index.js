@@ -256,18 +256,25 @@ app.post("/validate-apikey", async (req, res) => {
     if (!apiKeyToValidate) {
       return res.status(400).json({ error: "API key dibutuhkan" });
     }
-    // Cek key yang statusnya 'active'
-    const sql =
-      "SELECT COUNT(*) as count FROM api_keys WHERE api_key = ? AND status = 'active'";
+
+    const sql = `
+        SELECT COUNT(*) as count 
+        FROM api_keys 
+        WHERE api_key = ? 
+          AND status = 'active' 
+          AND expires_at > NOW()`; 
     const [rows] = await pool.query(sql, [apiKeyToValidate]);
     const count = rows[0].count;
+
     if (count > 0) {
       res.json({ valid: true, message: "API Key sudah Valid" });
     } else {
-      res.status(401).json({
-        valid: false,
-        message: "API Key Tidak Valid, Tidak Ditemukan, atau Inactive",
-      });
+      res
+        .status(401)
+        .json({
+          valid: false,
+          message: "API Key Tidak Valid, Diblokir, atau Kedaluwarsa",
+        });
     }
   } catch (error) {
     console.error("Error saat validasi key:", error);
